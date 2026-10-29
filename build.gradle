@@ -1,0 +1,104 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+
+    apply from: rootProject.file("dependencies.gradle")
+
+    repositories {
+        mavenLocal()
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+        maven { url = "https://central.sonatype.com/repository/maven-snapshots/" }
+    }
+    dependencies {
+        classpath deps.androidPlugin
+        classpath deps.kotlinGradlePlugin
+        classpath "org.jetbrains.kotlin:kotlin-sam-with-receiver:$versions.kotlinVersion"
+        classpath "com.android.legacy-kapt:com.android.legacy-kapt.gradle.plugin:$androidConfig.agpVersion"
+        classpath deps.gradleMavenPublishPlugin
+        classpath deps.benchmarkGradlePlugin
+        // Dokka is needed on classpath for vanniktech publish plugin
+        classpath deps.dokkaPlugin
+        classpath deps.kspGradlePlugin
+        classpath deps.ktlintGradlePlugin
+    }
+}
+
+allprojects {
+    apply from: rootProject.file("dependencies.gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = "https://central.sonatype.com/repository/maven-snapshots" }
+    }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+    compilerOptions {
+        allWarningsAsErrors = true
+    }
+}
+
+// Apply consistent JVM toolchain and target to all subprojects
+subprojects {
+    plugins.withId('checkstyle') {
+        checkstyle.toolVersion = rootProject.ext.versions.checkstyleVersion
+    }
+    afterEvaluate {
+        def toolchainVersion = rootProject.ext.jvmToolchainVersion
+        // Gradle/AGP plugins run on Java 17+; library bytecode remains Java 11.
+        def targetVersion = plugins.hasPlugin('java-gradle-plugin') ? 17 : rootProject.ext.jvmTargetVersion
+
+        // For Kotlin projects (both pure JVM and Android)
+        if (plugins.hasPlugin('org.jetbrains.kotlin.jvm') || plugins.hasPlugin('kotlin') ||
+            plugins.hasPlugin('com.android.library') || plugins.hasPlugin('com.android.application')) {
+            kotlin {
+                jvmToolchain(toolchainVersion)
+            }
+            tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                compilerOptions {
+                    jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.@Companion.fromTarget(targetVersion.toString())
+                }
+            }
+        }
+        // For Java-only projects (without Kotlin)
+        else if (plugins.hasPlugin('java')) {
+            java {
+                toolchain {
+                    languageVersion = JavaLanguageVersion.of(toolchainVersion)
+                }
+            }
+        }
+
+        // For Android projects, also set compileOptions
+        if (plugins.hasPlugin('com.android.library') || plugins.hasPlugin('com.android.application')) {
+            android {
+                compileOptions {
+                    sourceCompatibility = JavaVersion.toVersion(targetVersion)
+                    targetCompatibility = JavaVersion.toVersion(targetVersion)
+                }
+            }
+        }
+
+        // For pure Java projects
+        if (plugins.hasPlugin('java')) {
+            java {
+                sourceCompatibility = JavaVersion.toVersion(targetVersion)
+                targetCompatibility = JavaVersion.toVersion(targetVersion)
+            }
+        }
+    }
+}
+
+def getReleaseRepositoryUrl() {
+    return hasProperty('RELEASE_REPOSITORY_URL') ? RELEASE_REPOSITORY_URL
+            : "https://oss.sonatype.org/service/local/staging/deploy/maven2/"
+}
+
+def getSnapshotRepositoryUrl() {
+    return hasProperty('SNAPSHOT_REPOSITORY_URL') ? SNAPSHOT_REPOSITORY_URL
+            : "https://central.sonatype.com/repository/maven-snapshots"
+}
+

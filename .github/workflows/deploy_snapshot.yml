@@ -1,0 +1,31 @@
+name: Deploy snapshot
+
+on:
+  # Trigger ONLY on push to master branch
+  push:
+    branches:
+      - master
+jobs:
+  build-test:
+    uses: airbnb/DeepLinkDispatch/.github/workflows/build_test.yml@master
+  deploy-snapshot:
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DeepLinkDispatch
+        uses: actions/checkout@v7
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'corretto'
+          java-version: '25'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4.0.4
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-37.2' 'build-tools;37.0.0'
+      - name: Deploy new snapshot of DeepLinkDispatch
+        shell: bash
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.NEXUS_USER }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.NEXUS_PASSWORD }}
+        run: ./gradlew -PenforceSnapshotVersion=true publishAllPublicationsToMavenCentral
